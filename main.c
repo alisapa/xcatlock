@@ -11,10 +11,20 @@
 #include "lock.xpm"
 #include "unicode.h"
 
+// Function declarations
+void do_cleanup(int exitCode);
+void setup_wm_hints(char *progname, int argc, char **argv,
+    int width, int height, Pixmap icon_pxm);
+int query_xrm_bool(char *name);
+int xim_setup(void);
+int max(int a, int b);
+void draw_window(Pixmap cat_pxm, Pixmap lock_pxm, int width, int height);
+
+// Global variables
 Display *disp;
 Window win;
 int screen_num;
-GC cat_gc, lock_gc;
+GC cat_gc = NULL, lock_gc = NULL;
 XSizeHints *size_hints;
 XWMHints *wm_hints;
 XClassHint *class_hints;
@@ -25,20 +35,24 @@ XIM xim = NULL;
 XIC xic = NULL;
 
 const char *usage_str =
-"xcatlock [-test] <passphrase>\n"
+"Usage: xcatlock <passphrase>\n"
+"Options: -test, -nowindow, -verbose\n"
 ;
 
 static XrmOptionDescRec opTable[] = {
-  {"-bg",   "*background", XrmoptionSepArg, (caddr_t) NULL},
-  {"-fg",   "*foreground", XrmoptionSepArg, (caddr_t) NULL},
-  {"-test", "*istest",     XrmoptionNoArg,  (caddr_t) "1"},
-  {"-verbose", "*verbose", XrmoptionNoArg,  (caddr_t) "1"},
+  {"-bg",       "*background", XrmoptionSepArg, (caddr_t) NULL},
+  {"-fg",       "*foreground", XrmoptionSepArg, (caddr_t) NULL},
+  {"-test",     "*istest",     XrmoptionNoArg,  (caddr_t) "1"},
+  {"-tiny",     "*tiny",       XrmoptionNoArg,  (caddr_t) "1"},
+  {"-verbose",  "*verbose",    XrmoptionNoArg,  (caddr_t) "1"},
 };
-const int opTableSize = 4;
+const int opTableSize = 5;
 
 void do_cleanup(int exitCode) {
   if (xic) XDestroyIC(xic);
   if (xim) XCloseIM(xim);
+  if (lock_gc) XFreeGC(disp, lock_gc);
+  if (cat_gc) XFreeGC(disp, cat_gc);
   if (progNameP && progName.value) XFree(progName.value);
   if (size_hints) XFree(size_hints);
   if (class_hints) XFree(class_hints);
@@ -95,7 +109,6 @@ int query_xrm_bool(char *name) {
   char *str_type[20]; // TODO: Is this sufficiently large...?
   XrmValue value;
   if (XrmGetResource(xrm_db, name, name, str_type, &value)) {
-    printf("%s\n", *str_type);
     if (value.size > 0)
       return value.addr[0] - '0';
   }
@@ -134,10 +147,18 @@ int xim_setup(void) {
   return 0;
 }
 
-void draw_window(Pixmap cat_pxm, Pixmap lock_pxm) {
-  XCopyPlane(disp, cat_pxm, win, cat_gc, 0, 0, cat_width, cat_height, 0, 0, 1);
+inline int max(int a, int b) {
+  return a > b ? a : b;
+}
+
+void draw_window(Pixmap cat_pxm, Pixmap lock_pxm, int width, int height) {
+  int x_off = max((width - cat_width) / 2, 0);
+  int y_off = max((height - cat_width) / 2, 0);
+  XCopyPlane(disp, cat_pxm, win, cat_gc, 0, 0, cat_width, cat_height,
+      x_off, y_off, 1);
+  XSetClipOrigin(disp, lock_gc, x_off, y_off);
   XCopyPlane(disp, lock_pxm, win, lock_gc, 0, 0, lock_width, lock_height,
-      0, 0, 1);
+      x_off, y_off, 1);
 }
 
 int main (int argc, char **argv) {
@@ -159,11 +180,15 @@ int main (int argc, char **argv) {
   // Get command-line or Xresources options
   XrmInitialize();
   XrmParseCommand(&xrm_db, opTable, opTableSize, "xcatlock", &argc, argv);
+  if (argc > 2) {
+    fprintf(stderr, "Expected 1 argument, got %d\n", argc-1);
+    return 1;
+  }
   int is_test = query_xrm_bool("xcatlock.istest");
+  int is_large = !query_xrm_bool("xcatlock.tiny");
   int is_verbose = query_xrm_bool("xcatlock.verbose");
 
   if (argc < 2) {
-    fprintf(stderr, "Usage:\n");
     fprintf(stderr, "%s", usage_str);
     XrmDestroyDatabase(xrm_db);
     return 1;
@@ -180,9 +205,22 @@ int main (int argc, char **argv) {
 
   // Create the window
   width = height = 48;
-  win = XCreateSimpleWindow(disp, RootWindow(disp, screen_num), xpos, ypos,
-      width, height, border_width, BlackPixel(disp, screen_num),
-      WhitePixel(disp, screen_num));
+  if (is_large) {
+    win = XCreateSimpleWindow(disp, RootWindow(disp, screen_num), xpos, ypos,
+        width, height, border_width, BlackPixel(disp, screen_num),
+        WhitePixel(disp, screen_num));
+  } else {
+    // Create the smallest possible window, and tell the window manager
+    // not to add decorations.
+    // Apparently, an InputOnly window can't grab the pointer, so this is the
+    // smallest we can get.
+    XSetWindowAttributes attrib;
+    attrib.override_redirect = True;
+    win = XCreateWindow(disp, RootWindow(disp, screen_num), xpos, ypos,
+        1, 1, 0, CopyFromParent, InputOutput, CopyFromParent,
+        CWOverrideRedirect, &attrib);
+  }
+  if (!win) do_cleanup(1);
 
   cat_pixmap = XCreateBitmapFromData(disp, win, cat_bits,
       cat_width, cat_height);
@@ -204,19 +242,22 @@ int main (int argc, char **argv) {
   XSelectInput(disp, win, ExposureMask | KeyPressMask | ButtonPressMask |
       StructureNotifyMask | xim_filter_events);
 
-  XGCValues gcv = { .background = WhitePixel(disp, screen_num),
-    .foreground = BlackPixel(disp, screen_num), .line_width = 1};
-  cat_gc = XCreateGC(disp, win, GCForeground | GCBackground | GCLineWidth,
-      &gcv);
-  XColor exact, actual;
-  res = XAllocNamedColor(disp, DefaultColormap(disp, screen_num),
-      is_test ? "grey" : "green", &exact, &actual);
-  if (res) gcv.foreground = actual.pixel;
-  else gcv.foreground = BlackPixel(disp, screen_num);
-  gcv.background = WhitePixel(disp, screen_num);
-  gcv.clip_mask = lock_pixmap;
-  lock_gc = XCreateGC(disp, win, GCForeground | GCBackground | GCLineWidth
-      | GCClipMask, &gcv);
+  // Graphics Contexts setup
+  if (is_large) {
+    XGCValues gcv = { .background = WhitePixel(disp, screen_num),
+      .foreground = BlackPixel(disp, screen_num), .line_width = 1};
+    cat_gc = XCreateGC(disp, win, GCForeground | GCBackground | GCLineWidth,
+        &gcv);
+    XColor exact, actual;
+    res = XAllocNamedColor(disp, DefaultColormap(disp, screen_num),
+        is_test ? "grey" : "green", &exact, &actual);
+    if (res) gcv.foreground = actual.pixel;
+    else gcv.foreground = BlackPixel(disp, screen_num);
+    gcv.background = WhitePixel(disp, screen_num);
+    gcv.clip_mask = lock_pixmap;
+    lock_gc = XCreateGC(disp, win, GCForeground | GCBackground | GCLineWidth
+        | GCClipMask, &gcv);
+  }
   
   XMapWindow(disp, win);
 
@@ -242,14 +283,14 @@ int main (int argc, char **argv) {
         fprintf(stderr, "Failed to grab keyboard: %s\n", errbuf);
         do_cleanup(1);
       }
-      if (res = XGrabPointer(disp, win, False, ButtonPressMask, GrabModeAsync, GrabModeAsync,
-          None, None, CurrentTime)) {
+      if (res = XGrabPointer(disp, win, False, ButtonPressMask, GrabModeAsync,
+            GrabModeAsync, None, None, CurrentTime)) {
         XGetErrorText(disp, res, errbuf, errbuf_size);
         fprintf(stderr, "Failed to grab mouse pointer: %s\n", errbuf);
         do_cleanup(1);
       }
 
-      draw_window(cat_pixmap, lock_pixmap);
+      if (is_large) draw_window(cat_pixmap, lock_pixmap, width, height);
       break;
     case ConfigureNotify:
       width = report.xconfigure.width;
