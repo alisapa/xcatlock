@@ -28,6 +28,11 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 	@mkdir -p $(OBJDIR)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
+readme:
+	groff -Tutf8 -man man/xcatlock.1 > README.txt
+	sed -i -e "s/\x1B\[[0-9;]*m//g" README.txt
+	sed -i -e "1,4d" README.txt
+
 .PHONY: clean
 clean:
 	rm -f $(OBJDIR)/*.o
@@ -37,9 +42,9 @@ clean:
 install:
 	mkdir -p $(INSTALL_BIN)
 	cp xcatlock $(INSTALL_BIN)/xcatlock
-#	mkdir -p $(INSTALL_MAN)
-#	cp man/xcatlock.1 $(INSTALL_MAN)/xcatlock
+	mkdir -p $(INSTALL_MAN)
+	cp man/xcatlock.1 $(INSTALL_MAN)/xcatlock
 .PHONY: uninstall
 uninstall:
 	rm -f $(INSTALL_BIN)/xcatlock
-#	rm -f $(INSTALL_MAN)/xcatlock.1
+	rm -f $(INSTALL_MAN)/xcatlock.1
