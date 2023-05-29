@@ -55,6 +55,8 @@ NOTES
               cations into an XWayland server, it will not be able to grab all
               the keyboard and mouse input.
 
+
+       XCatLock can't stop key combinations handled by the kernel.
               On Linux, switching to another framebuffer using Ctrl+Alt+F<num>
               is still possible, as is the use of PrintScr+SysRq.  This is be‐
               cause  these  key combinations are handled directly by the Linux
