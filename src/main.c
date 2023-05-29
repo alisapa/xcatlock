@@ -36,7 +36,7 @@ XIC xic = NULL;
 
 const char *usage_str =
 "Usage: xcatlock <passphrase>\n"
-"Options: -test, -nowindow, -verbose\n"
+"Options: -test, -tiny, -verbose\n"
 ;
 
 static XrmOptionDescRec opTable[] = {

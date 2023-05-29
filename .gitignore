@@ -1,2 +1,4 @@
-*.swp
+obj
 a.out
+xcatlock
+*.swp
