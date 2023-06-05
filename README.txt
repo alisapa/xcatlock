@@ -58,14 +58,14 @@ NOTES
 
        XCatLock can't stop key combinations handled by the kernel.
               On Linux, switching to another framebuffer using Ctrl+Alt+F<num>
-              is still possible, as is the use of PrintScr+SysRq.  This is be‐
-              cause  these  key combinations are handled directly by the Linux
-              kernel.  XCatLock grabbing and  intercepting  all  X11  keyboard
-              events  does not stop the kernel from reacting to the key combi‐
-              nation in its own way.  See this link for more detailed explana‐
-              tion   of   what   happens   when  Ctrl+Alt+F<num>  is  pressed:
-              https://unix.stackexchange.com/questions/63688/what-happens-
-              when-ctrl-alt-fnum-is-pressed/63700#63700
+              is still possible, as is the use of Alt+SysRq.  This is  because
+              these key combinations are handled directly by the Linux kernel.
+              XCatLock grabbing and intercepting all X11 keyboard events  does
+              not  stop the kernel from reacting to the key combination in its
+              own way.  See this link for more detailed  explanation  of  what
+              happens  when  Ctrl+Alt+F<num> is pressed: https://unix.stackex‐
+              change.com/questions/63688/what-happens-when-ctrl-alt-fnum-is-
+              pressed/63700#63700
 
 
        If using Unicode characters, first test the passphrase with -test.
